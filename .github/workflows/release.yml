@@ -1,0 +1,62 @@
+name: Release
+
+# Push a tag like v1.0.0 to build a signed APK and publish it as a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      # Without signing secrets (or if the release was already published by hand) there is nothing to do.
+      - name: Check prerequisites
+        id: check
+        env:
+          KEYSTORE_BASE64: ${{ secrets.CRYPTCORE_KEYSTORE_BASE64 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::Sin el secreto CRYPTCORE_KEYSTORE_BASE64 no se firma ni publica (ver README)"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          elif gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "::notice::La release $GITHUB_REF_NAME ya existe"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build signed APK
+        if: steps.check.outputs.go == 'true'
+        env:
+          CRYPTCORE_KEYSTORE: release.jks
+          CRYPTCORE_KEYSTORE_PASSWORD: ${{ secrets.CRYPTCORE_KEYSTORE_PASSWORD }}
+          CRYPTCORE_KEY_ALIAS: ${{ secrets.CRYPTCORE_KEY_ALIAS }}
+          CRYPTCORE_KEY_PASSWORD: ${{ secrets.CRYPTCORE_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Publish release
+        if: steps.check.outputs.go == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK="CryptCore-${GITHUB_REF_NAME}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          sha256sum "$APK" > "$APK.sha256"
+          gh release create "$GITHUB_REF_NAME" "$APK" "$APK.sha256" --title "CryptCore $GITHUB_REF_NAME" --generate-notes
