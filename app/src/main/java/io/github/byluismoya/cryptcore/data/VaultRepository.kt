@@ -40,7 +40,11 @@ sealed interface ImportResult {
  *
  * The data key is only held in memory while unlocked; [lock] wipes it.
  */
-class VaultRepository(context: Context) {
+class VaultRepository(
+    context: Context,
+    /** Called whenever the user proves they know the master password (create, unlock, change). */
+    private val onMasterPasswordVerified: () -> Unit = {},
+) {
     private val dir = context.noBackupFilesDir
     private val vaultFile = AtomicFile(File(dir, "vault.ccv"))
     private val biometricFile = AtomicFile(File(dir, "biometric.json"))
@@ -69,6 +73,7 @@ class VaultRepository(context: Context) {
         }
         disableBiometric() // a leftover biometric wrap would belong to a previous vault
         setUnlocked(created.envelope, created.key, VaultContent())
+        onMasterPasswordVerified()
     }
 
     /** @return false on wrong password. Throws [CorruptVaultException] if the file is damaged. */
@@ -86,6 +91,7 @@ class VaultRepository(context: Context) {
             throw e
         }
         setUnlocked(env, dek, decrypted)
+        onMasterPasswordVerified()
         return true
     }
 
@@ -139,6 +145,7 @@ class VaultRepository(context: Context) {
             val updated = withContext(Dispatchers.Default) { VaultCodec.rewrap(env, dek, new) }
             withContext(Dispatchers.IO) { write(vaultFile, VaultCodec.encode(updated)) }
             synchronized(guard) { if (key != null) envelope = updated }
+            onMasterPasswordVerified()
             true
         } finally {
             dek.fill(0)

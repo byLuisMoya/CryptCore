@@ -27,6 +27,7 @@ import androidx.compose.material.icons.rounded.ContentPasteOff
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Fingerprint
+import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Password
 import androidx.compose.material.icons.rounded.SystemUpdate
@@ -75,6 +76,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.byluismoya.cryptcore.AppContainer
 import io.github.byluismoya.cryptcore.BuildConfig
+import io.github.byluismoya.cryptcore.core.MasterPasswordReminder
 import io.github.byluismoya.cryptcore.data.ImportResult
 import io.github.byluismoya.cryptcore.data.SettingsStore
 import io.github.byluismoya.cryptcore.data.ThemeMode
@@ -93,7 +95,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private enum class Dialog { AutoLock, Clipboard, ChangePassword }
+private enum class Dialog { AutoLock, Clipboard, ChangePassword, MasterReminder }
 
 private const val MAX_BACKUP_BYTES = 32 * 1024 * 1024
 
@@ -112,6 +114,7 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
     val clipboardSeconds by settings.clipboardSeconds.collectAsStateWithLifecycle()
     val themeMode by settings.themeMode.collectAsStateWithLifecycle()
     val dynamicColor by settings.dynamicColor.collectAsStateWithLifecycle()
+    val reminderDays by settings.masterReminderDays.collectAsStateWithLifecycle()
 
     var biometricAvailability by remember { mutableIntStateOf(BiometricKeys.availability(context)) }
     LifecycleResumeEffect(Unit) {
@@ -203,6 +206,13 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
                         }
                     },
                     trailing = { Switch(checked = biometricEnabled, onCheckedChange = null) },
+                )
+                SettingRow(
+                    icon = Icons.Rounded.Key,
+                    title = "Pedir la contraseña maestra",
+                    subtitle = SettingsStore.label(MasterPasswordReminder.INTERVAL_OPTIONS, reminderDays) +
+                        if (biometricEnabled) " · aunque uses la huella" else " · solo si usas la huella",
+                    onClick = { dialog = Dialog.MasterReminder },
                 )
                 SettingRow(
                     icon = Icons.Rounded.Timer,
@@ -321,6 +331,14 @@ fun SettingsScreen(container: AppContainer, onBack: () -> Unit) {
             options = SettingsStore.CLIPBOARD_OPTIONS,
             selected = clipboardSeconds,
             onSelect = { settings.setClipboardSeconds(it); dialog = null },
+            onDismiss = { dialog = null },
+        )
+        Dialog.MasterReminder -> ChoiceDialog(
+            title = "Pedir la contraseña maestra",
+            description = "Con la huella activada, cada cierto tiempo se pide la contraseña maestra para que no se te olvide. Sin ella no se pueden recuperar tus datos.",
+            options = MasterPasswordReminder.INTERVAL_OPTIONS,
+            selected = reminderDays,
+            onSelect = { settings.setMasterReminderDays(it); dialog = null },
             onDismiss = { dialog = null },
         )
         Dialog.ChangePassword -> ChangePasswordDialog(

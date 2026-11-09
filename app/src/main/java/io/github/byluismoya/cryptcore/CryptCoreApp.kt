@@ -22,7 +22,7 @@ class CryptCoreApp : Application() {
 /** Manual DI: a handful of process-wide singletons. */
 class AppContainer(app: Application) {
     val settings = SettingsStore(app)
-    val repository = VaultRepository(app)
+    val repository = VaultRepository(app, onMasterPasswordVerified = settings::markMasterPasswordVerified)
     val clipboard = SecureClipboard(app, settings)
     val autoLock = AutoLock(repository, settings).also { it.install() }
 

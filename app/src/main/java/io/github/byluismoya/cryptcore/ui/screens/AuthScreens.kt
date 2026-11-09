@@ -28,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Fingerprint
+import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.Button
@@ -56,6 +57,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.withResumed
 import io.github.byluismoya.cryptcore.AppContainer
+import io.github.byluismoya.cryptcore.core.MasterPasswordReminder
 import io.github.byluismoya.cryptcore.crypto.CorruptVaultException
 import io.github.byluismoya.cryptcore.security.BiometricUnlock
 import io.github.byluismoya.cryptcore.security.findFragmentActivity
@@ -238,6 +240,11 @@ fun LockScreen(container: AppContainer) {
     val context = LocalContext.current
     val activity = remember(context) { context.findFragmentActivity() }
     val biometricEnabled by repo.biometricEnabled.collectAsStateWithLifecycle()
+    val settings = container.settings
+    val reminderDays by settings.masterReminderDays.collectAsStateWithLifecycle()
+    // Decided once per lock screen: when due, the fingerprint is not offered until the password is typed.
+    val passwordDue = remember { settings.isMasterPasswordDue() }
+    val offerBiometric = biometricEnabled && !passwordDue
 
     var password by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -277,6 +284,7 @@ fun LockScreen(container: AppContainer) {
     }
 
     fun biometric() {
+        if (settings.isMasterPasswordDue()) return
         scope.launch { error = BiometricUnlock.unlock(activity, repo) }
     }
 
@@ -285,7 +293,7 @@ fun LockScreen(container: AppContainer) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(Unit) {
         lifecycle.withResumed {}
-        if (biometricEnabled) biometric() else runCatching { focus.requestFocus() }
+        if (offerBiometric) biometric() else runCatching { focus.requestFocus() }
     }
 
     AuthScaffold {
@@ -299,6 +307,26 @@ fun LockScreen(container: AppContainer) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(32.dp))
+
+        if (biometricEnabled && passwordDue) {
+            val days = MasterPasswordReminder.daysSince(settings.lastMasterPasswordAt, System.currentTimeMillis())
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.padding(bottom = 20.dp),
+            ) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Key, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Spacer(Modifier.size(12.dp))
+                    Text(
+                        (if (days >= reminderDays) "Hace $days días que no usas tu contraseña maestra. " else "") +
+                            "Escríbela para no olvidarla; después podrás seguir entrando con la huella.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+            }
+        }
 
         PasswordField(
             value = password,
@@ -328,7 +356,7 @@ fun LockScreen(container: AppContainer) {
         Spacer(Modifier.height(20.dp))
         BusyButton("Desbloquear", busy = busy, enabled = password.isNotEmpty(), onClick = ::submit)
 
-        AnimatedVisibility(visible = biometricEnabled) {
+        AnimatedVisibility(visible = offerBiometric) {
             OutlinedButton(
                 onClick = ::biometric,
                 enabled = !busy,

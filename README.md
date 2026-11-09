@@ -15,6 +15,8 @@ propio teléfono y la app ni siquiera tiene permiso de Internet.
 - Perfiles por web o app (Netflix, Gmail…): nombre, usuario y correo opcionales, contraseña,
   web y notas.
 - Desbloqueo con contraseña maestra y, opcionalmente, con huella o rostro (biometría de clase fuerte).
+- Si usas la huella, cada cierto tiempo (por defecto cada semana; configurable a 1, 5, 7, 10 o 20 días)
+  se pide la contraseña maestra para que no se te olvide.
 - Generador de contraseñas (longitud, tipos de carácter, evitar caracteres ambiguos) y medidor de fortaleza.
 - Búsqueda (sin distinguir acentos), favoritas y copiar con un toque.
 - El portapapeles se borra solo (configurable) y la copia se marca como sensible, así que el aviso

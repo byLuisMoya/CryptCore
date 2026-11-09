@@ -2,6 +2,7 @@ package io.github.byluismoya.cryptcore.data
 
 import android.content.Context
 import androidx.core.content.edit
+import io.github.byluismoya.cryptcore.core.MasterPasswordReminder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +26,31 @@ class SettingsStore(context: Context) {
 
     private val _clipboardSeconds = MutableStateFlow(prefs.getInt(K_CLIPBOARD, 30))
     val clipboardSeconds: StateFlow<Int> = _clipboardSeconds.asStateFlow()
+
+    private val _masterReminderDays = MutableStateFlow(
+        prefs.getInt(K_MASTER_REMINDER, MasterPasswordReminder.DEFAULT_DAYS),
+    )
+    val masterReminderDays: StateFlow<Int> = _masterReminderDays.asStateFlow()
+
+    init {
+        // Installs that predate the reminder start counting from now instead of asking at once.
+        if (!prefs.contains(K_MASTER_VERIFIED_AT)) markMasterPasswordVerified()
+    }
+
+    /** Wall-clock time of the last successful master-password entry. */
+    val lastMasterPasswordAt: Long get() = prefs.getLong(K_MASTER_VERIFIED_AT, 0L)
+
+    fun markMasterPasswordVerified() {
+        prefs.edit { putLong(K_MASTER_VERIFIED_AT, System.currentTimeMillis()) }
+    }
+
+    fun isMasterPasswordDue(now: Long = System.currentTimeMillis()): Boolean =
+        MasterPasswordReminder.isDue(lastMasterPasswordAt, now, masterReminderDays.value)
+
+    fun setMasterReminderDays(days: Int) {
+        prefs.edit { putInt(K_MASTER_REMINDER, days) }
+        _masterReminderDays.value = days
+    }
 
     fun setThemeMode(mode: ThemeMode) {
         prefs.edit { putInt(K_THEME, mode.ordinal) }
@@ -51,6 +77,8 @@ class SettingsStore(context: Context) {
         private const val K_DYNAMIC = "dynamic_color"
         private const val K_AUTOLOCK = "auto_lock_seconds"
         private const val K_CLIPBOARD = "clipboard_seconds"
+        private const val K_MASTER_REMINDER = "master_reminder_days"
+        private const val K_MASTER_VERIFIED_AT = "master_verified_at"
 
         val AUTO_LOCK_OPTIONS = listOf(
             0 to "Al salir de la app",
